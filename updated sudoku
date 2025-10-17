@@ -1,0 +1,129 @@
+import tkinter as tk
+from tkinter import messagebox
+import random
+import copy
+
+class SudokuGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sudoku with Hint & Undo/Redo")
+        self.board = [[0]*9 for _ in range(9)]
+        self.entries = [[None]*9 for _ in range(9)]
+        self.undo_stack = []
+        self.redo_stack = []
+        self.hint_count = 5
+
+        self.generate_board()
+        self.create_ui()
+        self.bind_shortcuts()
+
+    def generate_board(self):
+        # For demo: fill some cells randomly
+        for i in range(9):
+            for j in range(9):
+                if random.random() < 0.2:
+                    self.board[i][j] = random.randint(1, 9)
+
+    def create_ui(self):
+        frame = tk.Frame(self.root)
+        frame.pack()
+
+        for i in range(9):
+            for j in range(9):
+                entry = tk.Entry(frame, width=2, font=('Arial', 18), justify='center')
+                entry.grid(row=i, column=j, padx=2, pady=2)
+                if self.board[i][j] != 0:
+                    entry.insert(0, str(self.board[i][j]))
+                    entry.config(state='disabled')
+                else:
+                    entry.bind("<FocusOut>", lambda e, x=i, y=j: self.save_move(x, y))
+                self.entries[i][j] = entry
+
+        btn_frame = tk.Frame(self.root)
+        btn_frame.pack(pady=10)
+
+        tk.Button(btn_frame, text="Hint", command=self.use_hint).grid(row=0, column=0, padx=5)
+        tk.Button(btn_frame, text="Undo", command=self.undo).grid(row=0, column=1, padx=5)
+        tk.Button(btn_frame, text="Redo", command=self.redo).grid(row=0, column=2, padx=5)
+        tk.Button(btn_frame, text="New Game", command=self.new_game).grid(row=0, column=3, padx=5)
+
+        self.hint_label = tk.Label(self.root, text=f"Hints left: {self.hint_count}")
+        self.hint_label.pack()
+
+    def bind_shortcuts(self):
+        self.root.bind("<Control-z>", lambda e: self.undo())
+        self.root.bind("<Control-y>", lambda e: self.redo())
+        self.root.bind("h", lambda e: self.use_hint())
+        self.root.bind("n", lambda e: self.new_game())
+
+    def save_move(self, i, j):
+        val = self.entries[i][j].get()
+        if val.isdigit() and 1 <= int(val) <= 9:
+            self.undo_stack.append((i, j, val))
+            if len(self.undo_stack) > 50:
+                self.undo_stack.pop(0)
+            self.redo_stack.clear()
+
+    def undo(self):
+        if self.undo_stack:
+            i, j, val = self.undo_stack.pop()
+            self.redo_stack.append((i, j, self.entries[i][j].get()))
+            self.entries[i][j].delete(0, tk.END)
+
+    def redo(self):
+        if self.redo_stack:
+            i, j, val = self.redo_stack.pop()
+            self.entries[i][j].delete(0, tk.END)
+            self.entries[i][j].insert(0, val)
+            self.undo_stack.append((i, j, val))
+
+    def use_hint(self):
+        if self.hint_count == 0:
+            messagebox.showinfo("Hint", "No hints left!")
+            return
+
+        # Find empty cells and prioritize those with fewer possibilities
+        candidates = []
+        for i in range(9):
+            for j in range(9):
+                if self.entries[i][j].get() == "":
+                    possible = self.get_possible_values(i, j)
+                    if possible:
+                        candidates.append((len(possible), i, j, possible))
+
+        if not candidates:
+            messagebox.showinfo("Hint", "No hint available!")
+            return
+
+        candidates.sort()
+        _, i, j, possible = candidates[0]
+        hint_val = random.choice(possible)
+        self.entries[i][j].insert(0, str(hint_val))
+        self.entries[i][j].config(fg='blue')
+        self.hint_count -= 1
+        self.hint_label.config(text=f"Hints left: {self.hint_count}")
+
+    def get_possible_values(self, row, col):
+        used = set()
+        for i in range(9):
+            used.add(self.entries[row][i].get())
+            used.add(self.entries[i][col].get())
+
+        box_row, box_col = row//3*3, col//3*3
+        for i in range(box_row, box_row+3):
+            for j in range(box_col, box_col+3):
+                used.add(self.entries[i][j].get())
+
+        return [str(n) for n in range(1, 10) if str(n) not in used]
+
+    def new_game(self):
+        self.root.destroy()
+        main()
+
+def main():
+    root = tk.Tk()
+    SudokuGUI(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
